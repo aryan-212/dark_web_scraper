@@ -4640,6 +4640,7 @@ name = "tor_scraper"
 version = "0.1.0"
 dependencies = [
  "arti",
+ "futures",
  "reqwest",
  "tokio",
 ]

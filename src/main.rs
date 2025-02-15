@@ -1,48 +1,71 @@
+use futures::future::join_all;
 use reqwest::Client;
-use std::error::Error;
-use tokio::{
-    task,
-    time::{sleep, Duration},
-};
+use std::time::Instant;
+use tokio::task;
 
+use std::vec::Vec;
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
-    let seedlist = [
-        "http://torlinkv7cft5zhegrokjrxj2st4hcimgidaxdmcmdpcrnwfxrr2zxqd.onion/",
-        "http://fvrifdnu75abxcoegldwea6ke7tnb3fxwupedavf5m3yg3y2xqyvi5qd.onion/",
-        "http://zqktlwiuavvvqqt4ybvgvi7tyo4hjl5xgfuvpdf6otjiycgwqbym2qad.onion/wiki/index.php/Main_Page",
+async fn main() {
+    let client = Client::new();
+    let urls = vec![
+        "https://example.com",
+        "https://httpbin.org/get",
+        "https://jsonplaceholder.typicode.com/todos/1",
     ];
 
-    let client = Client::builder()
-        .proxy(reqwest::Proxy::all("socks5h://127.0.0.1:9050")?)
-        .build()?;
+    let start = Instant::now();
 
-    let mut handles = vec![];
+    // Create a vector to hold the JoinHandles of the spawned tasks
+    let mut handles = Vec::new();
 
-    for url in seedlist.iter() {
+    for url in urls {
         let client = client.clone();
-        let url = url.to_string();
-        handles.push(task::spawn(async move {
-            println!("Fetching: {}", url);
-            match client.get(&url).send().await {
-                Ok(resp) => {
-                    if resp.status().is_success() {
-                        match resp.text().await {
-                            Ok(body) => println!("Success: {}", &body[..50]), // Print only a snippet
-                            Err(e) => println!("Failed to read response body: {}", e),
-                        }
-                    } else {
-                        println!("Failed: {} - Status: {}", url, resp.status());
-                    }
-                }
-                Err(e) => println!("Error fetching {}: {}", url, e),
+        let handle = task::spawn(async move {
+            let request_start = Instant::now();
+            println!(
+                "[{:?}] Sending request to {}",
+                request_start.duration_since(start),
+                url
+            );
+            match client.get(&*url).send().await {
+                Ok(resp) => match resp.text().await {
+                    Ok(text) => println!(
+                        "[{:?}] Response from {}: {}",
+                        Instant::now().duration_since(start),
+                        url,
+                        &text.to_string()[..20]
+                    ),
+                    Err(err) => eprintln!(
+                        "[{:?}] Error reading response from {}: {}",
+                        Instant::now().duration_since(start),
+                        url,
+                        err
+                    ),
+                },
+                Err(err) => eprintln!(
+                    "[{:?}] Error fetching {}: {}",
+                    Instant::now().duration_since(start),
+                    url,
+                    err
+                ),
             }
-        }));
+        });
+        handles.push(handle);
     }
 
-    for handle in handles {
-        handle.await?;
-    }
+    // Wait for all tasks to complete
+    let mut results = join_all(handles).await;
 
-    Ok(())
+    // let mut results = Vec::new(); // Declare results before the loop
+    // for handle in handles {
+    //     let result = handle.await;
+    //     results.push(result);
+    // }
+    //
+    // Handle any errors that occurred during task execution
+    for result in results {
+        if let Err(err) = result {
+            eprintln!("Task failed: {}", &err.to_string()[..20]);
+        }
+    }
 }
