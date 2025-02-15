@@ -6,12 +6,16 @@ use tokio::task;
 use std::vec::Vec;
 #[tokio::main]
 async fn main() {
-    let client = Client::new();
-    let urls = vec![
-        "https://example.com",
-        "https://httpbin.org/get",
-        "https://jsonplaceholder.typicode.com/todos/1",
+    let urls = [
+        "http://torlinkv7cft5zhegrokjrxj2st4hcimgidaxdmcmdpcrnwfxrr2zxqd.onion/",
+        "http://fvrifdnu75abxcoegldwea6ke7tnb3fxwupedavf5m3yg3y2xqyvi5qd.onion/",
+        "http://zqktlwiuavvvqqt4ybvgvi7tyo4hjl5xgfuvpdf6otjiycgwqbym2qad.onion/wiki/index.php/Main_Page",
     ];
+
+    let client = Client::builder()
+        .proxy(reqwest::Proxy::all("socks5h://127.0.0.1:9050").unwrap())
+        .build()
+        .unwrap();
 
     let start = Instant::now();
 
