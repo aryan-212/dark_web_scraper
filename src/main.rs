@@ -1,75 +1,71 @@
 use futures::future::join_all;
-use reqwest::Client;
+use reqwest;
 use std::time::Instant;
-use tokio::task;
+use tokio::{task, time};
 
-use std::vec::Vec;
+async fn fetch_url(id: usize, url: &str, client: reqwest::Client) -> Result<(), reqwest::Error> {
+    let start = Instant::now();
+    println!("[{id}] Sending request to {url}");
+
+    let response = client.get(url).send().await?;
+
+    let duration = start.elapsed();
+    println!(
+        "[{id}] Response from {url}: {} (Time: {:.2?})",
+        response.status(),
+        duration
+    );
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() {
-    let urls = [
-        "http://torlinkv7cft5zhegrokjrxj2st4hcimgidaxdmcmdpcrnwfxrr2zxqd.onion/",
-        "http://fvrifdnu75abxcoegldwea6ke7tnb3fxwupedavf5m3yg3y2xqyvi5qd.onion/",
-        "http://zqktlwiuavvvqqt4ybvgvi7tyo4hjl5xgfuvpdf6otjiycgwqbym2qad.onion/wiki/index.php/Main_Page",
-    ];
-
-    let client = Client::builder()
-        .proxy(reqwest::Proxy::all("socks5h://127.0.0.1:9050").unwrap())
+    let client = reqwest::Client::builder()
+        .pool_max_idle_per_host(100) // Increase idle connections per host
         .build()
         .unwrap();
+    let urls = vec![
+        "https://example.com",
+        "https://httpbin.org/get",
+        "https://jsonplaceholder.typicode.com/todos/1",
+        "https://jsonplaceholder.typicode.com/posts/1",
+        "https://jsonplaceholder.typicode.com/users/1",
+        "https://jsonplaceholder.typicode.com/comments/1",
+        "https://jsonplaceholder.typicode.com/albums/1",
+        "https://jsonplaceholder.typicode.com/photos/1",
+        "https://jsonplaceholder.typicode.com/todos/2",
+        "https://jsonplaceholder.typicode.com/posts/2",
+        "https://jsonplaceholder.typicode.com/users/2",
+        "https://jsonplaceholder.typicode.com/comments/2",
+        "https://jsonplaceholder.typicode.com/albums/2",
+        "https://jsonplaceholder.typicode.com/photos/2",
+        "https://jsonplaceholder.typicode.com/todos/3",
+        "https://jsonplaceholder.typicode.com/posts/3",
+        "https://jsonplaceholder.typicode.com/users/3",
+        "https://jsonplaceholder.typicode.com/comments/3",
+        "https://jsonplaceholder.typicode.com/albums/3",
+        "https://jsonplaceholder.typicode.com/photos/3",
+    ];
 
+    println!("\n=== Running with join_all (Concurrent) ===");
     let start = Instant::now();
+    let handles: Vec<_> = urls
+        .iter()
+        .enumerate()
+        .map(|(i, &url)| {
+            let client = client.clone();
+            task::spawn(fetch_url(i, url, client))
+        })
+        .collect();
 
-    // Create a vector to hold the JoinHandles of the spawned tasks
-    let mut handles = Vec::new();
+    let _results: Vec<_> = join_all(handles).await;
+    println!("Total time taken (join_all): {:.2?}", start.elapsed());
 
-    for url in urls {
-        let client = client.clone();
-        let handle = task::spawn(async move {
-            let request_start = Instant::now();
-            println!(
-                "[{:?}] Sending request to {}",
-                request_start.duration_since(start),
-                url
-            );
-            match client.get(&*url).send().await {
-                Ok(resp) => match resp.text().await {
-                    Ok(text) => println!(
-                        "[{:?}] Response from {}: {}",
-                        Instant::now().duration_since(start),
-                        url,
-                        &text.to_string()[..20]
-                    ),
-                    Err(err) => eprintln!(
-                        "[{:?}] Error reading response from {}: {}",
-                        Instant::now().duration_since(start),
-                        url,
-                        err
-                    ),
-                },
-                Err(err) => eprintln!(
-                    "[{:?}] Error fetching {}: {}",
-                    Instant::now().duration_since(start),
-                    url,
-                    err
-                ),
-            }
-        });
-        handles.push(handle);
+    println!("\n=== Running with Sequential Await ===");
+    let start = Instant::now();
+    let client = reqwest::Client::new();
+    for (i, url) in urls.iter().enumerate() {
+        let _ = fetch_url(i, url, client.clone()).await;
     }
-
-    // Wait for all tasks to complete
-    let mut results = join_all(handles).await;
-
-    // let mut results = Vec::new(); // Declare results before the loop
-    // for handle in handles {
-    //     let result = handle.await;
-    //     results.push(result);
-    // }
-    //
-    // Handle any errors that occurred during task execution
-    for result in results {
-        if let Err(err) = result {
-            eprintln!("Task failed: {}", &err.to_string()[..20]);
-        }
-    }
+    println!("Total time taken (sequential): {:.2?}", start.elapsed());
 }
